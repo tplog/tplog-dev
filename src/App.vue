@@ -81,8 +81,7 @@ const cards = [
     label: 'そこかしこ',
     links: [
       { text: 'GitHub', href: 'https://github.com/tplog' },
-      { text: 'X',      href: 'https://x.com/tplog' },
-      { text: 'メール',  href: 'mailto:hello@tplog.dev' }
+      { text: 'X',      href: 'https://x.com/tplog' }
     ]
   },
   {

@@ -12,9 +12,7 @@
         <span class="card-arrow">↗</span>
       </a>
     </div>
-    <div class="mt-4 pt-3 border-t border-black/8 text-[9px] tracking-[0.1em] text-gray-400">
-      いつでもお便りください
-    </div>
+
   </div>
 </template>
 
