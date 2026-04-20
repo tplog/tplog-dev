@@ -79,7 +79,7 @@ const cards = [
   },
   {
     type: 'elsewhere',
-    label: 'そこかしこ',
+    label: 'Find Me',
     links: [
       { text: 'GitHub', href: 'https://github.com/tplog' },
       { text: 'X',      href: 'https://x.com/tenbai_x' }
