@@ -73,7 +73,8 @@ const cards = [
   },
   {
     type: 'about',
-    label: 'だれか',
+    label: '人生現役',
+    image: '/icon.jpg',
     href: '/about'
   },
   {
