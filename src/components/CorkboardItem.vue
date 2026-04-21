@@ -23,7 +23,7 @@
       <div class="title">{{ c.title }}</div>
       <div class="excerpt">{{ c.excerpt }}</div>
       <div class="foot">
-        <span>{{ c.foot[0] }}</span><span>{{ c.foot[1] }} →</span>
+        <span>{{ c.foot[0] }}</span><span class="read-hint">↗ read</span>
       </div>
     </template>
 
@@ -56,6 +56,7 @@
           <a :href="link.href" @click.stop>{{ link.label }}</a>
         </li>
       </ul>
+      <div class="item-read" v-if="item.article">↗ read</div>
     </template>
 
     <!-- postcard -->

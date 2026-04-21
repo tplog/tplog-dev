@@ -301,6 +301,38 @@ html, body {
 .item.namecard li a:hover { color: var(--stamp); }
 .item.namecard li a::after { content: "↗"; color: var(--ink-3); }
 
+.item-read {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--ink-rule);
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: right;
+  opacity: 0.5;
+  transition: opacity .2s ease, color .2s ease;
+}
+.item:hover .item-read {
+  opacity: 1;
+  color: var(--stamp);
+}
+
+.item.note .foot .read-hint {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  opacity: 0.5;
+  transition: opacity .2s ease, color .2s ease;
+}
+.item.note:hover .foot .read-hint {
+  opacity: 1;
+  color: var(--stamp);
+}
+
 /* ── Postcard ── */
 .item.postcard {
   width: 320px;
