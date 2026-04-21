@@ -1,142 +1,491 @@
 <template>
-  <div class="w-screen min-h-screen flex">
-    <!-- sidebar (desktop) -->
-    <aside class="hidden lg:flex w-10 min-h-screen border-r border-black/5 flex-col items-center py-5 bg-[#F9F8F4] z-20 sticky top-0">
-      <div class="h-full flex flex-col justify-between items-center text-[9px] text-gray-300">
-        <div class="flex flex-col items-center gap-10">
-          <span class="writing-vertical tracking-[0.25em]">TPLOG</span>
-          <span class="writing-vertical tracking-[0.25em]">2026</span>
-        </div>
-        <div class="flex flex-col items-center gap-6">
-          <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-          <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-        </div>
+  <div class="brand"><b>tplog</b><span style="color:var(--ink-3)"> · a corkboard</span><span class="dot">.</span></div>
+  <div class="frame-tag l-top">tplog · est. 2024</div>
+  <div class="frame-tag l-bot">a notebook with no edges</div>
+  <div class="frame-tag r-top">issue · 042</div>
+  <div class="frame-tag r-bot">2026 / 04 · tokyo</div>
+
+  <div ref="viewportRef" class="viewport" @mousedown="onViewportMouseDown" @wheel.prevent="onWheel">
+    <div ref="canvasRef" class="canvas" :style="canvasStyle">
+      <!-- connection threads -->
+      <svg class="thread-layer" :width="CW" :height="CH" :viewBox="`0 0 ${CW} ${CH}`">
+        <path v-for="(d, i) in threadPaths" :key="i" :d="d" />
+      </svg>
+
+      <!-- items -->
+      <CorkboardItem
+        v-for="item in data.items"
+        :key="item.id"
+        :item="item"
+        :saved-position="savedPositions[item.id]"
+        @mousedown="onItemMouseDown"
+        @click="onItemClick"
+      />
+    </div>
+  </div>
+
+  <div class="hint" :class="{ fade: hintFaded }">
+    <span class="k">drag</span><span>pan</span>
+    <span class="k">scroll</span><span>zoom</span>
+    <span class="k">click</span><span>read</span>
+    <span class="k">drag card</span><span>rearrange</span>
+  </div>
+
+  <div ref="minimapRef" class="minimap" @mousedown="onMinimapMouseDown">
+    <div class="vbox" :style="vboxStyle"></div>
+    <div
+      v-for="dot in minimapDots"
+      :key="dot.id"
+      class="mdot"
+      :style="dot.style"
+    ></div>
+  </div>
+
+  <div class="canvas-controls">
+    <button title="Zoom out" @click="zoomOut">−</button>
+    <div class="zoom">{{ zoomPercent }}</div>
+    <button title="Zoom in" @click="zoomIn">+</button>
+    <button class="text" title="Reset view" @click="home">home</button>
+    <button class="text" title="Reset positions" @click="reorganize">tidy</button>
+  </div>
+
+  <div class="tagbar">
+    <button :class="{ on: !activeTag }" @click="setTag(null)">all</button>
+    <button
+      v-for="tag in tagList"
+      :key="tag.name"
+      :class="{ on: activeTag === tag.name }"
+      @click="setTag(tag.name)"
+    >
+      {{ tag.name }}<span class="count">{{ tag.count }}</span>
+    </button>
+  </div>
+
+  <div class="popover-overlay" :class="{ open: popoverOpen }" @click.self="closePopover">
+    <article v-if="popoverArticle" class="popover">
+      <button class="close" aria-label="close" @click="closePopover">×</button>
+      <div class="eyebrow">
+        <span>{{ popoverArticle.eyebrow }}</span><span>tplog</span>
       </div>
-    </aside>
-
-    <!-- main -->
-    <main class="flex-1 min-h-screen relative">
-      <div class="absolute inset-0 grid-bg opacity-50 pointer-events-none"></div>
-
-      <header class="h-14 border-b border-black/5 flex items-center px-5 md:px-8 bg-[#F9F8F4]/85 backdrop-blur-sm z-10 sticky top-0">
-        <span class="text-[10px] tracking-[0.2em] text-gray-400">tplog</span>
-      </header>
-
-      <section class="relative z-0 px-5 py-8 md:px-8">
-        <div class="board-canvas">
-          <component
-            v-for="(card, i) in shuffled"
-            :key="card._key"
-            :is="cardMap[card.type]"
-            :data="card"
-            :index="i"
-            class="board-item"
-            :style="positions[i]"
-          />
-        </div>
-      </section>
-
-      <footer class="h-auto md:h-10 border-t border-black/5 bg-[#F9F8F4] flex flex-col md:flex-row items-start md:items-center justify-between px-5 py-3 md:px-6 md:py-0 gap-2 z-20">
-        <span class="text-[9px] tracking-[0.15em] text-gray-400">tplog.dev</span>
-        <div class="flex-1 flex justify-start md:justify-center w-full md:w-auto">
-          <div class="h-0.5 w-16 bg-gray-200 rounded-full overflow-hidden">
-            <div class="h-full w-1/2 bg-[#4a9e8e]"></div>
-          </div>
-        </div>
-        <span class="text-[9px] tracking-[0.12em] text-gray-300">card · card · card</span>
-      </footer>
-    </main>
+      <h1>{{ popoverArticle.title }}</h1>
+      <div class="meta">
+        <span v-for="m in popoverArticle.meta" :key="m">{{ m }}</span>
+      </div>
+      <div class="body" v-html="popoverArticle.body"></div>
+    </article>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import HeroCard from '../components/cards/HeroCard.vue'
-import AboutCard from '../components/cards/AboutCard.vue'
-import QuoteCard from '../components/cards/QuoteCard.vue'
-import ElsewhereCard from '../components/cards/ElsewhereCard.vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { TPLOG_DATA } from '../data/corkboard-data.js'
+import CorkboardItem from '../components/CorkboardItem.vue'
 
-/* ===== card type map ===== */
-const cardMap = {
-  hero: HeroCard,
-  about: AboutCard,
-  quote: QuoteCard,
-  elsewhere: ElsewhereCard
+const data = TPLOG_DATA
+const CW = 5200
+const CH = 3600
+const MIN_S = 0.22
+const MAX_S = 1.5
+const SAVE_KEY = 'tplog.positions.v2'
+
+/* ── DOM refs ── */
+const viewportRef = ref(null)
+const canvasRef = ref(null)
+const minimapRef = ref(null)
+
+/* ── reactive state ── */
+const tx = ref(0)
+const ty = ref(0)
+const scale = ref(0.55)
+const activeTag = ref(null)
+const popoverOpen = ref(false)
+const popoverArticle = ref(null)
+const hintFaded = ref(false)
+const savedPositions = ref({})
+const minimapDots = ref([])
+const zCounter = ref(50)
+
+/* ── computed ── */
+const canvasStyle = computed(() => ({
+  transform: `translate(${tx.value}px, ${ty.value}px) scale(${scale.value})`
+}))
+
+const zoomPercent = computed(() => Math.round(scale.value * 100) + '%')
+
+const vboxStyle = computed(() => {
+  const mw = minimapRef.value?.clientWidth || 200
+  const mh = minimapRef.value?.clientHeight || 140
+  const rx = mw / CW
+  const ry = mh / CH
+  const vw = viewportRef.value?.clientWidth || window.innerWidth
+  const vh = viewportRef.value?.clientHeight || window.innerHeight
+  const vx = -tx.value / scale.value
+  const vy = -ty.value / scale.value
+  const vcw = vw / scale.value
+  const vch = vh / scale.value
+  return {
+    left: (vx * rx) + 'px',
+    top: (vy * ry) + 'px',
+    width: Math.max(6, vcw * rx) + 'px',
+    height: Math.max(6, vch * ry) + 'px'
+  }
+})
+
+const tagList = computed(() => {
+  const counts = {}
+  data.items.forEach(it => (it.tags || []).forEach(t => {
+    counts[t] = (counts[t] || 0) + 1
+  }))
+  return data.allTags
+    .filter(t => counts[t])
+    .map(t => ({ name: t, count: counts[t] }))
+})
+
+const threadPaths = computed(() => {
+  const positions = {}
+  data.items.forEach(it => {
+    const p = savedPositions.value[it.id]
+    positions[it.id] = { x: p ? p.x : it.x, y: p ? p.y : it.y }
+  })
+  return data.threads.map(pair => {
+    const a = positions[pair[0]]
+    const b = positions[pair[1]]
+    if (!a || !b) return null
+    const ax = a.x + 100
+    const ay = a.y + 80
+    const bx = b.x + 100
+    const by = b.y + 80
+    const mx = (ax + bx) / 2 + (Math.random() - 0.5) * 80
+    const my = (ay + by) / 2 + (Math.random() - 0.5) * 80
+    return `M ${ax} ${ay} Q ${mx} ${my} ${bx} ${by}`
+  }).filter(Boolean)
+})
+
+/* ── localStorage helpers ── */
+function loadPositions() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch (e) { return {} }
 }
 
-/* ===== card data ===== */
-const cards = [
-  {
-    type: 'hero',
-    text: '言葉を拾い、光を灯す。',
-    href: '/about'
-  },
-  {
-    type: 'about',
-    label: '人生現役',
-    image: '/icon.jpg',
-    href: '/about'
-  },
-  {
-    type: 'elsewhere',
-    label: 'Find Me',
-    links: [
-      { text: 'GitHub', href: 'https://github.com/tplog' },
-      { text: 'X',      href: 'https://x.com/tenbai_x' }
-    ]
-  },
-  {
-    type: 'quote',
-    text: '恐れず、悩み、知恵を発達させる。より幸福な人間は、より乏しい人間である。',
-    author: 'ラルフ・ウォルド・エマーソン'
-  },
-  {
-    type: 'quote',
-    text: '冬は春の中にある。夜は朝の中にある。',
-    author: 'アーサー・ラッセル'
-  },
-  {
-    type: 'quote',
-    text: '詩は、言葉が目標になって息をする瞬間。',
-    author: '加藤楸邨'
-  },
-  {
-    type: 'quote',
-    text: '発酵は待つことを教えてくれる。焦らず、ただそこにいることの意味。',
-    author: 'tplog'
-  },
-  {
-    type: 'quote',
-    text: 'ないかもしれない。しかし、あるかもしれない。それ十分だ。',
-    author: '野上弥生子'
-  }
-]
-
-/* ===== layout positions ===== */
-const positions = [
-  { left: '50px',  top: '30px',  width: '300px', transform: 'rotate(-1.5deg)' },
-  { left: '400px', top: '60px',  width: '190px', transform: 'rotate(4deg)' },
-  { left: '640px', top: '140px', width: '280px', transform: 'rotate(-2deg)' },
-  { left: '970px', top: '70px',  width: '240px', transform: 'rotate(3deg)' },
-  { left: '120px', top: '360px', width: '250px', transform: 'rotate(1deg)' },
-  { left: '440px', top: '330px', width: '220px', transform: 'rotate(2.5deg)' },
-  { left: '720px', top: '350px', width: '260px', transform: 'rotate(-1.5deg)' },
-  { left: '1030px',top: '280px', width: '230px', transform: 'rotate(2deg)' }
-]
-
-/* ===== shuffle ===== */
-function shuffle(arr) {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+function persistPositions() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(savedPositions.value))
+  } catch (e) {}
 }
 
-const shuffled = ref([])
+/* ── transform ── */
+function apply() {
+  scale.value = Math.max(MIN_S, Math.min(MAX_S, scale.value))
+}
+
+function home() {
+  const hero = data.items.find(i => i.id === 'card-0')
+  const vw = viewportRef.value?.clientWidth || window.innerWidth
+  const vh = viewportRef.value?.clientHeight || window.innerHeight
+  scale.value = Math.min(0.78, (vw / CW) * 2.6)
+  tx.value = vw / 2 - (hero.x + 130) * scale.value
+  ty.value = vh / 2 - (hero.y + 120) * scale.value
+  apply()
+}
+
+function zoomIn() {
+  const mx = (viewportRef.value?.clientWidth || window.innerWidth) / 2
+  const my = (viewportRef.value?.clientHeight || window.innerHeight) / 2
+  const cx = (mx - tx.value) / scale.value
+  const cy = (my - ty.value) / scale.value
+  scale.value = Math.min(MAX_S, scale.value * 1.25)
+  tx.value = mx - cx * scale.value
+  ty.value = my - cy * scale.value
+  apply()
+}
+
+function zoomOut() {
+  const mx = (viewportRef.value?.clientWidth || window.innerWidth) / 2
+  const my = (viewportRef.value?.clientHeight || window.innerHeight) / 2
+  const cx = (mx - tx.value) / scale.value
+  const cy = (my - ty.value) / scale.value
+  scale.value = Math.max(MIN_S, scale.value / 1.25)
+  tx.value = mx - cx * scale.value
+  ty.value = my - cy * scale.value
+  apply()
+}
+
+function reorganize() {
+  if (confirm('Reset all card positions?')) {
+    localStorage.removeItem(SAVE_KEY)
+    savedPositions.value = {}
+    nextTick(() => {
+      buildMinimap()
+      applyFilter()
+      apply()
+    })
+  }
+}
+
+/* ── pan ── */
+let panning = false
+let panSx = 0, panSy = 0, panTx0 = 0, panTy0 = 0
+
+function onViewportMouseDown(e) {
+  if (e.target.closest('.item:not(.label):not(.section):not(.stamp-round)')) return
+  panning = true
+  panSx = e.clientX
+  panSy = e.clientY
+  panTx0 = tx.value
+  panTy0 = ty.value
+  viewportRef.value?.classList.add('panning')
+  hintFaded.value = true
+}
+
+/* ── zoom wheel ── */
+function onWheel(e) {
+  const rect = viewportRef.value.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const cx = (mx - tx.value) / scale.value
+  const cy = (my - ty.value) / scale.value
+  const factor = e.ctrlKey
+    ? Math.exp(-e.deltaY * 0.012)
+    : Math.exp(-e.deltaY * 0.0018)
+  const ns = Math.max(MIN_S, Math.min(MAX_S, scale.value * factor))
+  tx.value = mx - cx * ns
+  ty.value = my - cy * ns
+  scale.value = ns
+  apply()
+  hintFaded.value = true
+}
+
+/* ── drag items ── */
+const justDraggedIds = new Set()
+
+let dragState = null // { el, item, offX, offY, startX, startY }
+
+function onItemMouseDown(e, item, el) {
+  if (['label', 'section', 'stamp-round'].includes(item.type)) return
+  if (e.target.closest('a')) return
+
+  const rect = el.getBoundingClientRect()
+  const canvasRect = canvasRef.value.getBoundingClientRect()
+  dragState = {
+    el,
+    item,
+    offX: (e.clientX - rect.left) / scale.value,
+    offY: (e.clientY - rect.top) / scale.value,
+    startX: e.clientX,
+    startY: e.clientY,
+    canvasRect
+  }
+  zCounter.value++
+  el.style.zIndex = zCounter.value
+  e.stopPropagation()
+  e.preventDefault()
+}
+
+function onItemClick(item) {
+  if (justDraggedIds.has(item.id)) {
+    justDraggedIds.delete(item.id)
+    return
+  }
+  if (item.article) {
+    openPopover(item.article)
+  }
+}
+
+/* ── global mouse handlers ── */
+function onMouseMove(e) {
+  if (panning) {
+    tx.value = panTx0 + (e.clientX - panSx)
+    ty.value = panTy0 + (e.clientY - panSy)
+    apply()
+  }
+  if (dragState) {
+    const dx = Math.abs(e.clientX - dragState.startX)
+    const dy = Math.abs(e.clientY - dragState.startY)
+    if (!dragState.el.classList.contains('dragging') && (dx > 3 || dy > 3)) {
+      dragState.el.classList.add('dragging')
+    }
+    if (dragState.el.classList.contains('dragging')) {
+      const cr = canvasRef.value.getBoundingClientRect()
+      const x = (e.clientX - cr.left) / scale.value - dragState.offX
+      const y = (e.clientY - cr.top) / scale.value - dragState.offY
+      dragState.el.style.left = x + 'px'
+      dragState.el.style.top = y + 'px'
+      dragState.el.style.transform = `rotate(${dragState.el.dataset.rotation || 0}deg)`
+    }
+  }
+  if (mDragging) {
+    minimapGoTo(e)
+  }
+}
+
+function onMouseUp() {
+  if (panning) {
+    panning = false
+    viewportRef.value?.classList.remove('panning')
+  }
+  if (dragState) {
+    if (dragState.el.classList.contains('dragging')) {
+      dragState.el.classList.remove('dragging')
+      const id = dragState.item.id
+      savedPositions.value[id] = {
+        x: parseFloat(dragState.el.style.left),
+        y: parseFloat(dragState.el.style.top),
+        r: dragState.el.dataset.rotation || '0',
+        z: dragState.el.style.zIndex
+      }
+      persistPositions()
+      justDraggedIds.add(id)
+      setTimeout(() => justDraggedIds.delete(id), 100)
+      buildMinimap()
+    }
+    dragState = null
+  }
+  if (mDragging) {
+    mDragging = false
+  }
+}
+
+/* ── minimap ── */
+let mDragging = false
+
+function minimapGoTo(e) {
+  const rect = minimapRef.value.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const cx = mx / rect.width * CW
+  const cy = my / rect.height * CH
+  tx.value = (viewportRef.value?.clientWidth || window.innerWidth) / 2 - cx * scale.value
+  ty.value = (viewportRef.value?.clientHeight || window.innerHeight) / 2 - cy * scale.value
+  apply()
+}
+
+function onMinimapMouseDown(e) {
+  mDragging = true
+  minimapGoTo(e)
+  e.preventDefault()
+}
+
+function buildMinimap() {
+  const dots = []
+  const mw = minimapRef.value?.clientWidth || 200
+  const mh = minimapRef.value?.clientHeight || 140
+  const rx = mw / CW
+  const ry = mh / CH
+
+  const items = canvasRef.value?.querySelectorAll('.item')
+  items?.forEach(el => {
+    if (el.classList.contains('label')) return
+    const left = parseFloat(el.style.left) || 0
+    const top = parseFloat(el.style.top) || 0
+    const w = el.offsetWidth
+    const h = el.offsetHeight
+
+    const style = {
+      left: (left * rx) + 'px',
+      top: (top * ry) + 'px',
+      width: Math.max(2, w * rx) + 'px',
+      height: Math.max(2, h * ry) + 'px'
+    }
+
+    if (el.classList.contains('namecard')) {
+      style.background = 'var(--stamp)'
+      style.opacity = '0.85'
+    } else if (el.classList.contains('polaroid')) {
+      style.background = 'var(--ink)'
+      style.opacity = '0.6'
+    }
+
+    dots.push({ id: el.dataset.id, style })
+  })
+  minimapDots.value = dots
+}
+
+/* ── tag filter ── */
+function setTag(tag) {
+  activeTag.value = tag
+  applyFilter()
+}
+
+function applyFilter() {
+  const items = canvasRef.value?.querySelectorAll('.item')
+  items?.forEach(el => {
+    const tags = (el.dataset.tags || '').split(',')
+    if (el.classList.contains('label') || el.classList.contains('section') || el.classList.contains('stamp-round')) {
+      el.classList.remove('dim')
+      return
+    }
+    if (!activeTag.value || tags.includes(activeTag.value)) {
+      el.classList.remove('dim')
+    } else {
+      el.classList.add('dim')
+    }
+  })
+}
+
+/* ── popover ── */
+function openPopover(article) {
+  popoverArticle.value = article
+  popoverOpen.value = true
+}
+
+function closePopover() {
+  popoverOpen.value = false
+}
+
+/* ── keyboard ── */
+function onKeyDown(e) {
+  if (e.key === 'Escape') closePopover()
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return
+  if (e.key === '0') home()
+  if (e.key === '+' || e.key === '=') zoomIn()
+  if (e.key === '-' || e.key === '_') zoomOut()
+}
+
+function onResize() {
+  if (!initDone) initView()
+}
+
+/* ── init ── */
+let initDone = false
+
+function initView() {
+  if (initDone) return
+  if ((viewportRef.value?.clientWidth || 0) === 0) return
+  initDone = true
+  home()
+  nextTick(() => {
+    buildMinimap()
+    applyFilter()
+  })
+}
 
 onMounted(() => {
-  shuffled.value = shuffle(cards.map((c, i) => ({ ...c, _key: i })))
+  savedPositions.value = loadPositions()
+
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('resize', onResize)
+
+  initView()
+  requestAnimationFrame(() => requestAnimationFrame(initView))
+  window.addEventListener('load', initView)
+
+  let retries = 0
+  const retryTimer = setInterval(() => {
+    initView()
+    if (initDone || ++retries > 40) clearInterval(retryTimer)
+  }, 50)
+
+  setTimeout(() => { hintFaded.value = true }, 6000)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', onMouseUp)
+  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
 })
 </script>
