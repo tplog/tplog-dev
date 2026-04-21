@@ -19,7 +19,7 @@
         :item="item"
         :saved-position="savedPositions[item.id]"
         @mousedown="onItemMouseDown"
-        @click="onItemClick"
+        @click="handleItemClick"
       />
     </div>
   </div>
@@ -258,8 +258,6 @@ function onWheel(e) {
 }
 
 /* ── drag items ── */
-const justDraggedIds = new Set()
-
 let dragState = null // { el, item, offX, offY, startX, startY }
 
 function onItemMouseDown(e, item, el) {
@@ -267,15 +265,13 @@ function onItemMouseDown(e, item, el) {
   if (e.target.closest('a')) return
 
   const rect = el.getBoundingClientRect()
-  const canvasRect = canvasRef.value.getBoundingClientRect()
   dragState = {
     el,
     item,
     offX: (e.clientX - rect.left) / scale.value,
     offY: (e.clientY - rect.top) / scale.value,
     startX: e.clientX,
-    startY: e.clientY,
-    canvasRect
+    startY: e.clientY
   }
   zCounter.value++
   el.style.zIndex = zCounter.value
@@ -283,14 +279,8 @@ function onItemMouseDown(e, item, el) {
   e.preventDefault()
 }
 
-function onItemClick(item) {
-  if (justDraggedIds.has(item.id)) {
-    justDraggedIds.delete(item.id)
-    return
-  }
-  if (item.article) {
-    openPopover(item.article)
-  }
+function handleItemClick(item) {
+  if (item.article) openPopover(item.article)
 }
 
 /* ── global mouse handlers ── */
@@ -336,8 +326,6 @@ function onMouseUp() {
         z: dragState.el.style.zIndex
       }
       persistPositions()
-      justDraggedIds.add(id)
-      setTimeout(() => justDraggedIds.delete(id), 100)
       buildMinimap()
     }
     dragState = null

@@ -1,11 +1,13 @@
 <template>
   <div
+    ref="rootRef"
     :class="itemClasses"
     :data-id="item.id"
     :data-tags="tagsStr"
     :data-rotation="rotation"
     :style="positionStyle"
     @mousedown="onMouseDown"
+    @click="onClick"
   >
     <!-- label / section -->
     <template v-if="item.type === 'label' || item.type === 'section'">
@@ -118,14 +120,15 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   item: { type: Object, required: true },
   savedPosition: { type: Object, default: null }
 })
 
-const emit = defineEmits(['mousedown'])
+const emit = defineEmits(['mousedown', 'click'])
+const rootRef = ref(null)
 
 const c = computed(() => props.item.content)
 
@@ -134,6 +137,10 @@ const itemClasses = computed(() => {
   if (props.item.cls) cls.push(...props.item.cls.split(' '))
   if (props.item.tone) cls.push(`tone-${props.item.tone}`)
   if (props.item.size) cls.push(`w-${props.item.size}`)
+  // 可读的卡片加 cursor 提示
+  if (props.item.article && !['label', 'section', 'stamp-round'].includes(props.item.type)) {
+    cls.push('has-article')
+  }
   return cls
 })
 
@@ -159,8 +166,19 @@ function tapeColor(i) {
   return tapeColors[(i + props.item.x) % tapeColors.length] || ''
 }
 
+/* click vs drag: 在组件内部判断，如果移动距离小于阈值则认为是 click */
+let md = null // mousedown state
+
 function onMouseDown(e) {
   if (e.target.closest('a')) return
-  emit('mousedown', e, props.item)
+  md = { x: e.clientX, y: e.clientY, time: Date.now() }
+  emit('mousedown', e, props.item, rootRef.value)
+}
+
+function onClick(e) {
+  if (e.target.closest('a')) return
+  // 如果刚刚 drag 过（由父组件通过 classList 控制），不触发 click
+  if (rootRef.value?.classList.contains('dragging')) return
+  emit('click', props.item)
 }
 </script>

@@ -120,6 +120,7 @@ html, body {
 }
 .item.dragging { transition: none; cursor: grabbing; z-index: 90 !important; }
 .item.dim { opacity: 0.18; filter: grayscale(0.5); pointer-events: none; }
+.item.has-article { cursor: pointer; }
 
 /* ── Note (sticky / memo) ── */
 .item.note {
